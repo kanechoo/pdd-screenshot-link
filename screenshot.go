@@ -98,15 +98,18 @@ func (s *ScreenshotImage) Execute() (*[]Result, error) {
 	log.Printf("Prefix Image Full Text:\n%s", prefixImageFullText)
 	//crop image
 	suffixImage := grayImage.Region(image.Rectangle{
-		Min: image.Point{X: 214, Y: 0},
+		Min: image.Point{X: 217, Y: 0},
 		Max: image.Point{X: grayImage.Cols(), Y: grayImage.Rows()},
 	})
+	//resize suffix image
+	resizeSuffixImage := gocv.NewMat()
+	gocv.Resize(suffixImage, &resizeSuffixImage, image.Point{X: suffixImage.Cols(), Y: suffixImage.Rows() + 200}, 0, 0, gocv.InterpolationLinear)
 	//adjust suffix image threshold
 	suffixThresholdImage := gocv.NewMat()
-	gocv.Threshold(suffixImage, &suffixThresholdImage, 240, 255, gocv.ThresholdBinary)
+	gocv.Threshold(resizeSuffixImage, &suffixThresholdImage, 165, 255, gocv.ThresholdBinary)
 	//adjust suffix image threshold
 	suffixThresholdImage2 := gocv.NewMat()
-	gocv.Threshold(suffixThresholdImage, &suffixThresholdImage2, 90, 255, gocv.ThresholdToZero)
+	gocv.Threshold(suffixThresholdImage, &suffixThresholdImage2, 50, 255, gocv.ThresholdToZero)
 	//output suffix image
 	suffixImageFile := fmt.Sprintf("%s/%d_suffix_.%s", folder, random, s.fileSuffixName)
 	gocv.IMWrite(suffixImageFile, suffixThresholdImage2)
