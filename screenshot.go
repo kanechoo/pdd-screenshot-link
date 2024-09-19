@@ -71,60 +71,73 @@ func (s *ScreenshotImage) Execute() (*[]Result, error) {
 		return &failResult, err
 	}
 	//load original image
-	originalImage := gocv.IMRead(imageFile, gocv.IMReadColor)
+	originalMat := gocv.IMRead(imageFile, gocv.IMReadColor)
 	//convert rgb color to gray
-	grayImage := gocv.NewMat()
-	gocv.CvtColor(originalImage, &grayImage, gocv.ColorBGRToGray)
+	grayColorMat := gocv.NewMat()
+	gocv.CvtColor(originalMat, &grayColorMat, gocv.ColorBGRToGray)
 	//crop image
-	prefixImage := grayImage.Region(image.Rectangle{
+	prefixMat := grayColorMat.Region(image.Rectangle{
 		Min: image.Point{X: 0, Y: 0},
-		Max: image.Point{X: 175, Y: grayImage.Rows()},
+		Max: image.Point{X: 175, Y: grayColorMat.Rows()},
 	})
 	//adjust prefix image threshold
-	prefixThresholdImage := gocv.NewMat()
-	gocv.Threshold(prefixImage, &prefixThresholdImage, 190, 255, gocv.ThresholdBinary)
+	prefixThresholdMat := gocv.NewMat()
+	gocv.Threshold(prefixMat, &prefixThresholdMat, 190, 255, gocv.ThresholdBinary)
 	//adjust prefix image threshold
-	PrefixThresholdImage2 := gocv.NewMat()
-	gocv.Threshold(prefixThresholdImage, &PrefixThresholdImage2, 90, 255, gocv.ThresholdToZero)
+	PrefixThresholdMat := gocv.NewMat()
+	gocv.Threshold(prefixThresholdMat, &PrefixThresholdMat, 90, 255, gocv.ThresholdToZero)
 	//output prefix image
-	prefixImageFile := fmt.Sprintf("%s/%d_prefix_.%s", folder, random, s.fileSuffixName)
-	gocv.IMWrite(prefixImageFile, PrefixThresholdImage2)
-	//tesseract get image full text
-	prefixImageFullText, err := tesseract(prefixImageFile)
+	prefixMatFile := fmt.Sprintf("%s/%d_prefix_.%s", folder, random, s.fileSuffixName)
+	gocv.IMWrite(prefixMatFile, PrefixThresholdMat)
+	//tesseractToText get image full text
+	prefixMatFullText, err := tesseractToText(prefixMatFile)
 	if err != nil {
 		return &failResult, err
 	}
-	s.PrefixImageFullText = prefixImageFullText
-	log.Printf("Prefix Image Full Text:\n%s", prefixImageFullText)
+	s.PrefixImageFullText = prefixMatFullText
+	log.Printf("Prefix Image Full Text:\n%s", prefixMatFullText)
 	//crop image
-	suffixImage := grayImage.Region(image.Rectangle{
-		Min: image.Point{X: 217, Y: 0},
-		Max: image.Point{X: grayImage.Cols(), Y: grayImage.Rows()},
+	suffixMat := grayColorMat.Region(image.Rectangle{
+		Min: image.Point{X: 218, Y: 0},
+		Max: image.Point{X: grayColorMat.Cols(), Y: grayColorMat.Rows()},
 	})
 	//resize suffix image
-	resizeSuffixImage := gocv.NewMat()
-	gocv.Resize(suffixImage, &resizeSuffixImage, image.Point{X: suffixImage.Cols(), Y: suffixImage.Rows() + 200}, 0, 0, gocv.InterpolationLinear)
+	resizeSuffixMat := gocv.NewMat()
+	gocv.Resize(suffixMat, &resizeSuffixMat, image.Point{X: suffixMat.Cols(), Y: suffixMat.Rows() + 400}, 0, 0, gocv.InterpolationLinear)
+	contours := gocv.FindContours(resizeSuffixMat, gocv.RetrievalTree, gocv.ChainApproxSimple)
+	for i := 0; i < contours.Size(); i++ {
+		pv := contours.At(i)
+		points := pv.ToPoints()
+		minX, minY, maxX, maxY := points[0].X, points[0].Y, points[0].X, points[0].Y
+		region := grayColorMat.Region(image.Rectangle{
+			Min: image.Point{X: minX, Y: minY},
+			Max: image.Point{X: maxX, Y: maxY},
+		})
+		//output suffix image
+		gocv.IMWrite(fmt.Sprintf("%s/%d.jpg", folder, time.Now().UnixMilli()), region)
+	}
 	//adjust suffix image threshold
-	suffixThresholdImage := gocv.NewMat()
-	gocv.Threshold(resizeSuffixImage, &suffixThresholdImage, 165, 255, gocv.ThresholdBinary)
+	suffixThresholdMat := gocv.NewMat()
+	//165
+	gocv.Threshold(resizeSuffixMat, &suffixThresholdMat, 165, 255, gocv.ThresholdBinary)
 	//adjust suffix image threshold
-	suffixThresholdImage2 := gocv.NewMat()
-	gocv.Threshold(suffixThresholdImage, &suffixThresholdImage2, 50, 255, gocv.ThresholdToZero)
+	suffixThresholdMatV2 := gocv.NewMat()
+	gocv.Threshold(suffixThresholdMat, &suffixThresholdMatV2, 50, 255, gocv.ThresholdToZero)
 	//output suffix image
-	suffixImageFile := fmt.Sprintf("%s/%d_suffix_.%s", folder, random, s.fileSuffixName)
-	gocv.IMWrite(suffixImageFile, suffixThresholdImage2)
-	//tesseract get image full text
-	suffixImageFullText, err := tesseract(suffixImageFile)
+	suffixMatFile := fmt.Sprintf("%s/%d_suffix_.%s", folder, random, s.fileSuffixName)
+	gocv.IMWrite(suffixMatFile, suffixThresholdMatV2)
+	//tesseractToText get image full text
+	suffixMatFullText, err := tesseractToText(suffixMatFile)
 	if err != nil {
 		return &failResult, err
 	}
-	s.SuffixImageFullText = suffixImageFullText
-	log.Printf("Suffix Image Full Text:\n%s", suffixImageFullText)
+	s.SuffixImageFullText = suffixMatFullText
+	log.Printf("Suffix Image Full Text:\n%s", suffixMatFullText)
 	prefixes := getPrefixFromFullText(s.PrefixImageFullText)
 	suffixes := getSuffixFromFullText(s.SuffixImageFullText)
 	result := combine(prefixes, suffixes)
 	//clean images
-	//	cleanImages([]string{imageFile, prefixImageFile, suffixImageFile})
+	//	cleanImages([]string{imageFile, prefixMatFile, suffixMatFile})
 	return result, nil
 }
 func getPrefixFromFullText(prefixFullText string) *[]Prefix {
