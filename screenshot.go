@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"gocv.io/x/gocv"
 	"image"
+	"image/color"
 	"log"
 	"os"
 	"regexp"
@@ -72,14 +73,12 @@ func (s *ScreenshotImage) Execute() (*[]Result, error) {
 	}
 	//load original image
 	originalMat := gocv.IMRead(imageFile, gocv.IMReadColor)
-	//convert rgb color to gray
-	grayColorMat := gocv.NewMat()
-	gocv.CvtColor(originalMat, &grayColorMat, gocv.ColorBGRToGray)
 	//crop image
-	prefixMat := grayColorMat.Region(image.Rectangle{
+	prefixMat := originalMat.Region(image.Rectangle{
 		Min: image.Point{X: 0, Y: 0},
-		Max: image.Point{X: 175, Y: grayColorMat.Rows()},
+		Max: image.Point{X: 175, Y: originalMat.Rows()},
 	})
+	gocv.CvtColor(prefixMat, &prefixMat, gocv.ColorBGRToGray)
 	//adjust prefix image threshold
 	prefixThresholdMat := gocv.NewMat()
 	gocv.Threshold(prefixMat, &prefixThresholdMat, 190, 255, gocv.ThresholdBinary)
@@ -97,35 +96,45 @@ func (s *ScreenshotImage) Execute() (*[]Result, error) {
 	s.PrefixImageFullText = prefixMatFullText
 	log.Printf("Prefix Image Full Text:\n%s", prefixMatFullText)
 	//crop image
-	suffixMat := grayColorMat.Region(image.Rectangle{
-		Min: image.Point{X: 218, Y: 0},
-		Max: image.Point{X: grayColorMat.Cols(), Y: grayColorMat.Rows()},
+	suffixMat := originalMat.Region(image.Rectangle{
+		Min: image.Point{X: 217, Y: 750},
+		Max: image.Point{X: originalMat.Cols(), Y: originalMat.Rows() - 250},
 	})
-	//resize suffix image
-	resizeSuffixMat := gocv.NewMat()
-	gocv.Resize(suffixMat, &resizeSuffixMat, image.Point{X: suffixMat.Cols(), Y: suffixMat.Rows() + 400}, 0, 0, gocv.InterpolationLinear)
-	contours := gocv.FindContours(resizeSuffixMat, gocv.RetrievalTree, gocv.ChainApproxSimple)
-	for i := 0; i < contours.Size(); i++ {
-		pv := contours.At(i)
-		points := pv.ToPoints()
-		minX, minY, maxX, maxY := points[0].X, points[0].Y, points[0].X, points[0].Y
-		region := grayColorMat.Region(image.Rectangle{
-			Min: image.Point{X: minX, Y: minY},
-			Max: image.Point{X: maxX, Y: maxY},
-		})
-		//output suffix image
-		gocv.IMWrite(fmt.Sprintf("%s/%d.jpg", folder, time.Now().UnixMilli()), region)
-	}
+	//0 400
+	gocv.Resize(suffixMat, &suffixMat, image.Point{X: suffixMat.Cols() * 3, Y: suffixMat.Rows() * 3}, 0, 0, gocv.InterpolationLinear)
+	suffixMatV2 := gocv.NewMat()
+	gocv.CvtColor(suffixMat, &suffixMatV2, gocv.ColorBGRToGray)
 	//adjust suffix image threshold
 	suffixThresholdMat := gocv.NewMat()
 	//165
-	gocv.Threshold(resizeSuffixMat, &suffixThresholdMat, 165, 255, gocv.ThresholdBinary)
-	//adjust suffix image threshold
-	suffixThresholdMatV2 := gocv.NewMat()
-	gocv.Threshold(suffixThresholdMat, &suffixThresholdMatV2, 50, 255, gocv.ThresholdToZero)
+	gocv.Threshold(suffixMatV2, &suffixThresholdMat, 0, 255, gocv.ThresholdOtsu)
+	//sx := gocv.NewMat()
+	//gocv.Sobel(suffixThresholdMat, &sx, gocv.MatTypeCV32F, 1, 0, 1, 1, 0, gocv.BorderDefault)
+	//sy := gocv.NewMat()
+	//gocv.Sobel(suffixThresholdMat, &sy, gocv.MatTypeCV32F, 0, 1, 1, 1, 0, gocv.BorderDefault)
+	//sz := gocv.NewMat()
+	//gocv.Magnitude(sx, sy, &sz)
+	//gocv.Normalize(sz, &sz, 0, 255, gocv.NormMinMax)
 	//output suffix image
 	suffixMatFile := fmt.Sprintf("%s/%d_suffix_.%s", folder, random, s.fileSuffixName)
-	gocv.IMWrite(suffixMatFile, suffixThresholdMatV2)
+	sa := gocv.NewMat()
+	//sz.ConvertTo(&sa, gocv.MatTypeCV8UC1)
+	gocv.BitwiseNot(suffixThresholdMat, &sa)
+	contours := gocv.FindContours(sa, gocv.RetrievalTree, gocv.ChainApproxSimple)
+	println(contours.Size())
+	gocv.DrawContours(&suffixMat, contours, -1, color.RGBA{
+		R: 255,
+		G: 255,
+		B: 0,
+		A: 1,
+	}, 0)
+	for i := 0; i < contours.Size(); i++ {
+		region := sa.Region(gocv.BoundingRect(contours.At(i)))
+		if gocv.ContourArea(contours.At(i)) > 100 {
+			gocv.IMWrite(fmt.Sprintf("%s/%d.jpg", folder, i), region)
+		}
+	}
+	gocv.IMWrite(suffixMatFile, suffixThresholdMat)
 	//tesseractToText get image full text
 	suffixMatFullText, err := tesseractToText(suffixMatFile)
 	if err != nil {
