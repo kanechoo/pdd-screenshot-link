@@ -2,13 +2,16 @@ package main
 
 import (
 	"fmt"
+	"github.com/kanechoo/pdd-screenshot-link/tesseract"
 	"gocv.io/x/gocv"
 	"image"
 	"log"
+	"math"
 	"sort"
 )
 
 func main() {
+	//高度超过40才可能是大写字母
 	//engine := gin.Default()
 	//engine.POST("/upload", func(c *gin.Context) {
 	//	file, _ := c.FormFile("file")
@@ -40,7 +43,8 @@ func main() {
 	test()
 }
 func test() {
-	o := gocv.IMRead("test.jpg", gocv.IMReadColor)
+	tessert := tesseract.New()
+	o := gocv.IMRead("test8.jpg", gocv.IMReadColor)
 	l := gocv.NewMat()
 	gocv.CvtColor(o, &l, gocv.ColorBGRToGray)
 	gocv.Threshold(l, &l, 0, 255, gocv.ThresholdOtsu)
@@ -48,7 +52,8 @@ func test() {
 	r := gocv.NewMat()
 	gocv.BitwiseNot(l, &r)
 	f := gocv.NewMat()
-	rectRange := gocv.GetStructuringElement(gocv.MorphRect, image.Point{X: 25, Y: 10})
+	//25 10
+	rectRange := gocv.GetStructuringElement(gocv.MorphRect, image.Point{X: 30, Y: 10})
 	gocv.MorphologyEx(r, &f, gocv.MorphClose, rectRange)
 	contours := gocv.FindContours(f, gocv.RetrievalTree, gocv.ChainApproxSimple)
 	//gocv.DrawContours(&o, contours, -1, color.RGBA{
@@ -60,19 +65,21 @@ func test() {
 	for i := 0; i < contours.Size(); i++ {
 		area := r.Region(gocv.BoundingRect(contours.At(i)))
 		//gocv.IMWrite(fmt.Sprintf("%s/o_%d.jpg", folder, i), area)
-		if area.Cols() > 924 && area.Cols() < 935 {
+		if area.Cols() > 905 && area.Cols() < 940 && tessert.DetectContains(&area, 6, "APP") {
 			//裁切掉代码前缀部分
 			area = area.Region(image.Rect(75, 0, area.Cols(), area.Rows()))
 			area2 := gocv.NewMat()
+			//2 8
 			element := gocv.GetStructuringElement(gocv.MorphRect, image.Point{X: 2, Y: 8})
 			gocv.MorphologyEx(area, &area2, gocv.MorphClose, element)
-			gocv.IMWrite(fmt.Sprintf("%s/a_%d.jpg", folder, i), area2)
+			gocv.IMWrite(fmt.Sprintf("%s/a_%d.jpg", "images", i), area2)
 			contours2 := gocv.FindContours(area2, gocv.RetrievalExternal, gocv.ChainApproxSimple)
-			gocv.Erode(area, &area, gocv.GetStructuringElement(gocv.MorphRect, image.Point{X: 2, Y: 2}))
+			//gocv.Erode(area, &area, gocv.GetStructuringElement(gocv.MorphRect, image.Point{X: 2, Y: 2}))
 			mapData := make(map[int]*gocv.Mat)
 			mapKeys := make([]int, 0)
 			for j := 0; j < contours2.Size(); j++ {
 				rect := gocv.BoundingRect(contours2.At(j))
+				rect.Min.X = int(math.Max(0, float64(rect.Min.X-2)))
 				region := area.Region(rect)
 				count := gocv.ContourArea(contours2.At(j))
 				if j == 30 {
@@ -84,7 +91,14 @@ func test() {
 				right.SetTo(gocv.Scalar{Val1: 0})
 				gocv.Hconcat(left, region, &region)
 				gocv.Hconcat(region, right, &region)
-				if region.Rows() >= 20 && region.Rows() < 40 {
+				top := gocv.NewMatWithSize(5, region.Cols(), gocv.MatTypeCV8UC1)
+				top.SetTo(gocv.Scalar{Val1: 0})
+				bottom := gocv.NewMatWithSize(5, region.Cols(), gocv.MatTypeCV8UC1)
+				bottom.SetTo(gocv.Scalar{Val1: 0})
+				gocv.Vconcat(top, region, &region)
+				gocv.Vconcat(region, bottom, &region)
+				//30 50
+				if region.Rows() > 30 && region.Rows() < 55 {
 					mapData[rect.Min.X] = &region
 					mapKeys = append(mapKeys, rect.Min.X)
 				}
@@ -92,7 +106,7 @@ func test() {
 			//排序
 			sort.Ints(mapKeys)
 			for index, key := range mapKeys {
-				gocv.IMWrite(fmt.Sprintf("%s/%d.jpg", folder, index), *mapData[key])
+				gocv.IMWrite(fmt.Sprintf("%s/%d.jpg", "images", index), *mapData[key])
 			}
 			//os.Exit(0)
 		}
