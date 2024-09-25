@@ -35,7 +35,7 @@ func main() {
 	//	log.Printf("Error: %v", err)
 	//	return
 	//}
-	p := x.NewXProcessor("test.jpg")
+	p := x.NewXProcessor("test8.jpg")
 	fragment, err := p.GetQuoteFragment()
 	if nil != err {
 		log.Fatal(err)
