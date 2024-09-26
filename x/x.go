@@ -65,7 +65,7 @@ func NewXProcessor(originImg string) *XProcessor {
 	return &p
 }
 func (p *XProcessor) Detect(letterFragment *LetterFragment) (string, error) {
-	text, err := p.tesseract.Detect(letterFragment.File, 13)
+	text, err := p.tesseract.Detect(letterFragment.File, 5, 0)
 	if err != nil {
 		return "", err
 	}
@@ -74,8 +74,8 @@ func (p *XProcessor) Detect(letterFragment *LetterFragment) (string, error) {
 	text = replaceUnCorrect(text)
 	//是否空字符串
 	if "" == text {
-		//用psm 6再试一次
-		text, err := p.tesseract.Detect(letterFragment.File, 6)
+		//用psm 6 oem 1再试一次
+		text, err := p.tesseract.Detect(letterFragment.File, 13, 1)
 		if err != nil {
 			return "", err
 		}
@@ -94,12 +94,13 @@ func (p *XProcessor) Detect(letterFragment *LetterFragment) (string, error) {
 	textArray := strings.Split(text, "")
 	if allSameIgnoreCase(textArray) && len(textArray) > 1 {
 		textArray = textArray[:1]
-		text = textArray[0]
+		text = strings.ToLower(textArray[0])
 	}
 	//如果都是相同的字母取第一个
 	if len(textArray) > 1 {
 		//用psm 6再试一次
-		text, err := p.tesseract.Detect(letterFragment.File, 6)
+		text, err := p.tesseract.Detect(letterFragment.File, 13, 0)
+		text = strings.ReplaceAll(text, "\n", "")
 		if err != nil {
 			return "", err
 		}
@@ -147,7 +148,7 @@ func checkCase(letter string, fragment *LetterFragment) string {
 	if isLower(letter) {
 		return letter
 	} else {
-		if fragment.Mat.Rows() <= 40 {
+		if fragment.Mat.Rows() <= 42 {
 			return strings.ToLower(letter)
 		}
 		return letter
@@ -265,8 +266,9 @@ func (p *XProcessor) extractFragment() error {
 	for i := 0; i < fragmentContours.Size(); i++ {
 		//根据轮廓裁切图片(要从反转的Mat中裁切，而不是从模糊后的Mat中裁切，模糊的Mat只是为了提取轮廓)
 		fragmentMat := reverseMat.Region(gocv.BoundingRect(fragmentContours.At(i)))
+		//gocv.IMWrite(fmt.Sprintf("images/%d.jpg", time.Now().UnixMilli()), fragmentMat)
 		//905和940是根据实际情况调整的，根据实际情况调整（这个长度的且含有APP字符串是为了裁切出含有类似【f:/-lWExrk9cpkEUw复制并打开拼多多APP】的片段图片)
-		if fragmentMat.Cols() > 905 && fragmentMat.Cols() < 940 && p.tesseract.DetectContains(&fragmentMat, 6, "APP") {
+		if fragmentMat.Cols() > 905 && fragmentMat.Cols() < 955 && p.tesseract.DetectContains(&fragmentMat, 6, "APP") {
 			//输出裁切后的图片到fragment文件夹
 			name := fmt.Sprintf("%s/%d.jpg", p.fragmentDir, i)
 			autoMkdirs(name)

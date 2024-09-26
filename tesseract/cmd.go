@@ -25,9 +25,42 @@ func (t *Tesseract) setPsm(psm int) {
 	t.psm = psm
 }
 
-func (t *Tesseract) Detect(imageFile string, psm int) (string, error) {
+func (t *Tesseract) Detect(imageFile string, psm int, oem int) (string, error) {
+	prefix := "%s stdout -l eng --psm %d --tessdata-dir /Users/konchoo/Downloads --oem %d -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	cmdStr := fmt.Sprintf(prefix, imageFile, psm, oem)
+	text, err := runThenGet(cmdStr)
+	if err != nil {
+		return "", err
+	}
+	text = strings.ReplaceAll(text, "\n", "")
+	if "00" == text {
+		text = "8"
+	} else if ("o" == text || "O" == text) && oem == 0 {
+		cmdStr = fmt.Sprintf(prefix, imageFile, 13, 1)
+		newText, err := runThenGet(cmdStr)
+		if err != nil {
+			return "", err
+		}
+		newText = strings.ReplaceAll(newText, "\n", "")
+		if "0" == newText {
+			text = newText
+		}
+	} else if "J" == text && oem == 0 {
+		cmdStr = fmt.Sprintf(prefix, imageFile, 13, 1)
+		newText, err := runThenGet(cmdStr)
+		if err != nil {
+			return "", err
+		}
+		newText = strings.ReplaceAll(newText, "\n", "")
+		if "j" == newText {
+			text = newText
+		}
+	}
+	return text, nil
+}
+func runThenGet(cmdStr string) (string, error) {
 	var cmd *exec.Cmd
-	cmd = exec.Command("tesseract", imageFile, "stdout", "-l", "eng", "--psm", fmt.Sprintf("%d", psm))
+	cmd = exec.Command("tesseract", strings.Split(cmdStr, " ")...)
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
@@ -38,7 +71,7 @@ func (t *Tesseract) DetectFromMat(mat *gocv.Mat, psm int, remove bool) (string, 
 	random := time.Now().UnixMilli()
 	img := fmt.Sprintf("%s/%d.jpg", folder, random)
 	gocv.IMWrite(img, *mat)
-	text, err := t.Detect(img, psm)
+	text, err := t.Detect(img, psm, 1)
 	if remove {
 		cleanImage(img)
 	}
