@@ -40,10 +40,6 @@ type XProcessor struct {
 	OriginImg string
 	//提取后需要分析的片段图片，图片和名称将和文件夹名称一致
 	fragment []*QuoteFragment
-	//文件夹
-	dirs []string
-	//文件夹和文件夹的mat对应关系的映射
-	dirMatMap map[string][]*gocv.Mat
 	//tesseract
 	tesseract *tesseract.Tesseract
 	//切割图片存放文件夹
@@ -56,26 +52,37 @@ func NewXProcessor(originImg string) *XProcessor {
 	p := XProcessor{
 		OriginImg: originImg,
 		tesseract: tesseract.New(),
-		dirs:      make([]string, 0),
-		dirMatMap: make(map[string][]*gocv.Mat),
 		fragment:  make([]*QuoteFragment, 0),
 		baseDir:   fmt.Sprintf("images/%d", time.Now().UnixMilli()),
 	}
 	p.fragmentDir = fmt.Sprintf("%s/fragment", p.baseDir)
 	return &p
 }
+func (p *XProcessor) TrashMat() {
+	err := os.RemoveAll(p.baseDir)
+	if err != nil {
+		log.Printf("删除文件夹:【%s】失败：%v", p.baseDir, err)
+	}
+	err = os.Remove(p.OriginImg)
+	if err != nil {
+		log.Printf("删除文件:【%s】失败：%v", p.OriginImg, err)
+	}
+}
 func (p *XProcessor) Detect(letterFragment *LetterFragment) (string, error) {
 	text, err := p.tesseract.Detect(letterFragment.File, 5, 0)
+	text = strings.ReplaceAll(text, "\n", "")
+	text = strings.TrimSpace(text)
 	if err != nil {
 		return "", err
 	}
-	text = strings.ReplaceAll(text, "\n", "")
 	//特殊情况替换
 	text = replaceUnCorrect(text)
 	//是否空字符串
 	if "" == text {
 		//用psm 6 oem 1再试一次
 		text, err := p.tesseract.Detect(letterFragment.File, 13, 1)
+		text = strings.ReplaceAll(text, "\n", "")
+		text = strings.TrimSpace(text)
 		if err != nil {
 			return "", err
 		}
@@ -101,6 +108,7 @@ func (p *XProcessor) Detect(letterFragment *LetterFragment) (string, error) {
 		//用psm 6再试一次
 		text, err := p.tesseract.Detect(letterFragment.File, 13, 0)
 		text = strings.ReplaceAll(text, "\n", "")
+		text = strings.TrimSpace(text)
 		if err != nil {
 			return "", err
 		}

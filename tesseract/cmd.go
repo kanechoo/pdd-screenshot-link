@@ -26,17 +26,22 @@ func (t *Tesseract) setPsm(psm int) {
 }
 
 func (t *Tesseract) Detect(imageFile string, psm int, oem int) (string, error) {
-	prefix := "%s stdout -l eng --psm %d --tessdata-dir /Users/konchoo/Downloads --oem %d -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-	cmdStr := fmt.Sprintf(prefix, imageFile, psm, oem)
+	dir := os.Getenv("TESSDATA_DIR")
+	if dir == "" {
+		dir = "/Users/konchoo/Downloads"
+	}
+	prefix := "%s stdout -l eng --psm %d --tessdata-dir %s --oem %d -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	cmdStr := fmt.Sprintf(prefix, imageFile, psm, dir, oem)
 	text, err := runThenGet(cmdStr)
 	if err != nil {
 		return "", err
 	}
 	text = strings.ReplaceAll(text, "\n", "")
+	text = strings.TrimSpace(text)
 	if "00" == text {
 		text = "8"
 	} else if ("o" == text || "O" == text) && oem == 0 {
-		cmdStr = fmt.Sprintf(prefix, imageFile, 13, 1)
+		cmdStr = fmt.Sprintf(prefix, imageFile, 13, dir, 1)
 		newText, err := runThenGet(cmdStr)
 		if err != nil {
 			return "", err
@@ -46,7 +51,7 @@ func (t *Tesseract) Detect(imageFile string, psm int, oem int) (string, error) {
 			text = newText
 		}
 	} else if "J" == text && oem == 0 {
-		cmdStr = fmt.Sprintf(prefix, imageFile, 13, 1)
+		cmdStr = fmt.Sprintf(prefix, imageFile, 13, dir, 1)
 		newText, err := runThenGet(cmdStr)
 		if err != nil {
 			return "", err
