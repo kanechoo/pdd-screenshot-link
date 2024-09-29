@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/kanechoo/pdd-screenshot-link/x"
 	"io/fs"
@@ -17,6 +18,7 @@ func init() {
 func main() {
 	//高度超过40才可能是大写字母
 	engine := gin.Default()
+	engine.Use(cors.Default())
 	engine.POST("/upload", func(c *gin.Context) {
 		file, _ := c.FormFile("file")
 		f, err := file.Open()
