@@ -25,24 +25,19 @@ func (t *Tesseract) setPsm(psm int) {
 	t.psm = psm
 }
 
-func (t *Tesseract) Detect(imageFile string, psm int, oem int) (string, error) {
-	dir := os.Getenv("TESSDATA_DIR")
-	if dir == "" {
-		dir = "/Users/konchoo/Downloads"
-	}
-	prefix := "%s stdout -l eng --psm %d --tessdata-dir %s --oem %d -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-	cmdStr := fmt.Sprintf(prefix, imageFile, psm, dir, oem)
+func (t *Tesseract) Detect(imageFile string, commands string) (string, error) {
+	cmdStr := getCommandLine(&imageFile, commands)
 	text, err := runThenGet(cmdStr)
 	if err != nil {
 		return "", err
 	}
 	text = strings.ReplaceAll(text, "\n", "")
 	text = strings.TrimSpace(text)
-	if "00" == text {
+	if "00" == text || "oo" == text || "0o" == text || "o0" == text {
 		text = "8"
-	} else if ("o" == text || "O" == text) && oem == 0 {
-		cmdStr = fmt.Sprintf(prefix, imageFile, 13, dir, 1)
-		newText, err := runThenGet(cmdStr)
+	} else if ("o" == text || "O" == text) && strings.Contains(*cmdStr, "--oem 0") {
+		cmdStrV2 := getCommandLine(&imageFile, "--psm 13 --oem 1")
+		newText, err := runThenGet(cmdStrV2)
 		if err != nil {
 			return "", err
 		}
@@ -50,9 +45,29 @@ func (t *Tesseract) Detect(imageFile string, psm int, oem int) (string, error) {
 		if "0" == newText {
 			text = newText
 		}
-	} else if "J" == text && oem == 0 {
-		cmdStr = fmt.Sprintf(prefix, imageFile, 13, dir, 1)
-		newText, err := runThenGet(cmdStr)
+	} else if "J" == text && strings.Contains(*cmdStr, "--oem 0") {
+		cmdStrV2 := getCommandLine(&imageFile, "--psm 13 --oem 1")
+		newText, err := runThenGet(cmdStrV2)
+		if err != nil {
+			return "", err
+		}
+		newText = strings.ReplaceAll(newText, "\n", "")
+		if "j" == newText {
+			text = newText
+		}
+	} else if "9" == text && strings.Contains(*cmdStr, "--oem 0") && strings.Contains(*cmdStr, "--psm 13") {
+		cmdStrV2 := getCommandLine(&imageFile, "--psm 13 --oem 1")
+		newText, err := runThenGet(cmdStrV2)
+		if err != nil {
+			return "", err
+		}
+		newText = strings.ReplaceAll(newText, "\n", "")
+		if "g" == newText {
+			text = newText
+		}
+	} else if "i" == text && strings.Contains(*cmdStr, "--oem 0") && strings.Contains(*cmdStr, "--psm 13") {
+		cmdStrV2 := getCommandLine(&imageFile, "--psm 13 --oem 1")
+		newText, err := runThenGet(cmdStrV2)
 		if err != nil {
 			return "", err
 		}
@@ -63,36 +78,49 @@ func (t *Tesseract) Detect(imageFile string, psm int, oem int) (string, error) {
 	}
 	return text, nil
 }
-func runThenGet(cmdStr string) (string, error) {
+func getCommandLine(imageFile *string, commands string) *string {
+	dir := os.Getenv("TESSDATA_DIR")
+	if dir == "" {
+		dir = "/Users/konchoo/Downloads"
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("%s stdout", *imageFile))
+	commands = " " + commands
+	sb.WriteString(commands)
+	if !strings.Contains(commands, "-l") {
+		sb.WriteString(" -l eng")
+	}
+	if !strings.Contains(commands, "--psm") {
+		sb.WriteString(" --psm 5")
+	}
+	if !strings.Contains(commands, "--oem") {
+		sb.WriteString(" --oem 0")
+	}
+	if !strings.Contains(commands, "--tessdata-dir") && !strings.Contains(sb.String(), "--oem 1") {
+		sb.WriteString(fmt.Sprintf(" --tessdata-dir %s", dir))
+	}
+	if !strings.Contains(sb.String(), "-c tessedit_char_whitelist") && strings.Contains(sb.String(), "-l eng") {
+		sb.WriteString(" -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
+	}
+	s := sb.String()
+	return &s
+}
+func runThenGet(cmdStr *string) (string, error) {
 	var cmd *exec.Cmd
-	cmd = exec.Command("tesseract", strings.Split(cmdStr, " ")...)
+	cmd = exec.Command("tesseract", strings.Split(*cmdStr, " ")...)
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
 	return string(out), nil
 }
-func (t *Tesseract) DetectFromMat(mat *gocv.Mat, psm int, remove bool) (string, error) {
+func (t *Tesseract) DetectFromMat(mat *gocv.Mat, remove bool, commands string) (string, error) {
 	random := time.Now().UnixMilli()
 	img := fmt.Sprintf("%s/%d.jpg", folder, random)
 	gocv.IMWrite(img, *mat)
-	text, err := t.Detect(img, psm, 1)
+	text, err := t.Detect(img, commands)
 	if remove {
-		cleanImage(img)
+		_ = os.Remove(img)
 	}
 	return text, err
-}
-func (t *Tesseract) DetectContains(mat *gocv.Mat, psm int, subtext string) bool {
-	text, err := t.DetectFromMat(mat, psm, true)
-	if err != nil {
-		return false
-	}
-	return strings.Contains(text, subtext)
-}
-func cleanImage(img string) bool {
-	err := os.Remove(img)
-	if err != nil {
-		return false
-	}
-	return true
 }

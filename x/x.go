@@ -16,7 +16,7 @@ import (
 
 var (
 	//所有大小写字母和数字
-	letters = strings.Split("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", "")
+	letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 	//大写字母
 	upperLetters = strings.Split("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "")
 	//小写字母
@@ -69,7 +69,7 @@ func (p *XProcessor) TrashMat() {
 	}
 }
 func (p *XProcessor) Detect(letterFragment *LetterFragment) (string, error) {
-	text, err := p.tesseract.Detect(letterFragment.File, 5, 0)
+	text, err := p.tesseract.Detect(letterFragment.File, "--psm 13 --oem 0")
 	text = strings.ReplaceAll(text, "\n", "")
 	text = strings.TrimSpace(text)
 	if err != nil {
@@ -79,8 +79,8 @@ func (p *XProcessor) Detect(letterFragment *LetterFragment) (string, error) {
 	text = replaceUnCorrect(text)
 	//是否空字符串
 	if "" == text {
-		//用psm 6 oem 1再试一次
-		text, err := p.tesseract.Detect(letterFragment.File, 13, 1)
+		//用psm 13 oem 1再试一次
+		text, err := p.tesseract.Detect(letterFragment.File, "--psm 7 --oem 1")
 		text = strings.ReplaceAll(text, "\n", "")
 		text = strings.TrimSpace(text)
 		if err != nil {
@@ -106,7 +106,7 @@ func (p *XProcessor) Detect(letterFragment *LetterFragment) (string, error) {
 	//如果都是相同的字母取第一个
 	if len(textArray) > 1 {
 		//用psm 6再试一次
-		text, err := p.tesseract.Detect(letterFragment.File, 13, 0)
+		text, err := p.tesseract.Detect(letterFragment.File, "--psm 13 --oem 0")
 		text = strings.ReplaceAll(text, "\n", "")
 		text = strings.TrimSpace(text)
 		if err != nil {
@@ -276,15 +276,21 @@ func (p *XProcessor) extractFragment() error {
 		fragmentMat := reverseMat.Region(gocv.BoundingRect(fragmentContours.At(i)))
 		//gocv.IMWrite(fmt.Sprintf("images/%d.jpg", time.Now().UnixMilli()), fragmentMat)
 		//905和940是根据实际情况调整的，根据实际情况调整（这个长度的且含有APP字符串是为了裁切出含有类似【f:/-lWExrk9cpkEUw复制并打开拼多多APP】的片段图片)
-		if fragmentMat.Cols() > 905 && fragmentMat.Cols() < 955 && p.tesseract.DetectContains(&fragmentMat, 6, "APP") {
-			//输出裁切后的图片到fragment文件夹
-			name := fmt.Sprintf("%s/%d.jpg", p.fragmentDir, i)
-			autoMkdirs(name)
-			gocv.IMWrite(name, fragmentMat)
-			p.fragment = append(p.fragment, &QuoteFragment{
-				Dir: fmt.Sprintf("%s/%d", p.fragmentDir, i),
-				Mat: &fragmentMat,
-			})
+		if fragmentMat.Cols() > 905 && fragmentMat.Cols() < 955 {
+			quoteText, err := p.tesseract.DetectFromMat(&fragmentMat, true, "-l chi_sim --oem 1 --psm 6")
+			if err != nil {
+				return err
+			}
+			if strings.Contains(quoteText, "复制") || strings.Contains(quoteText, "多多") || strings.Contains(quoteText, "打开") {
+				//输出裁切后的图片到fragment文件夹
+				name := fmt.Sprintf("%s/%d.jpg", p.fragmentDir, i)
+				autoMkdirs(name)
+				gocv.IMWrite(name, fragmentMat)
+				p.fragment = append(p.fragment, &QuoteFragment{
+					Dir: fmt.Sprintf("%s/%d", p.fragmentDir, i),
+					Mat: &fragmentMat,
+				})
+			}
 		}
 	}
 	return nil

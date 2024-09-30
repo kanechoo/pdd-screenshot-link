@@ -5,6 +5,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/kanechoo/pdd-screenshot-link/x"
+	"gocv.io/x/gocv"
 	"io/fs"
 	"log"
 	"math/rand"
@@ -16,10 +17,10 @@ func init() {
 	_ = os.Mkdir("images", fs.ModePerm)
 }
 func main() {
-	//高度超过40才可能是大写字母
 	engine := gin.Default()
 	engine.Use(cors.Default())
 	engine.POST("/upload", func(c *gin.Context) {
+		system := c.Query("system")
 		file, _ := c.FormFile("file")
 		f, err := file.Open()
 		if err != nil {
@@ -32,7 +33,7 @@ func main() {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
-		result, err := handle(&b)
+		result, err := handle(&b, system)
 		if err != nil {
 			c.JSON(500, gin.H{"data": err.Error()})
 			return
@@ -45,7 +46,7 @@ func main() {
 		return
 	}
 }
-func handle(b *[]byte) (*[]string, error) {
+func handle(b *[]byte, system string) (*[]string, error) {
 	imageFile := fmt.Sprintf("images/%d.jpg", time.Now().UnixMilli())
 	err := os.WriteFile(imageFile, *b, fs.ModePerm)
 	if nil != err {
@@ -69,6 +70,9 @@ func handle(b *[]byte) (*[]string, error) {
 			if nil != err {
 				return nil, err
 			}
+			if system == "ios" && ("I" == letter || "l" == letter) {
+				letter = adaptIAndLLetter(letterFragments[j].Mat)
+			}
 			code += letter
 		}
 		links = append(links, code)
@@ -78,6 +82,30 @@ func handle(b *[]byte) (*[]string, error) {
 		links[i] = fmt.Sprintf("%c:/%s%s%s", randomCharacter(), "\u21e5", links[i], "\u21e4")
 	}
 	return &links, nil
+}
+func adaptIAndLLetter(mat *gocv.Mat) string {
+	height := mat.Rows()
+	width := mat.Cols()
+	minRow := height
+	maxRow := -1
+	// 遍历每一列
+	for col := 0; col < width; col++ {
+		for row := 0; row < height; row++ {
+			if mat.GetUCharAt(row, col) == 255 { // 检查是否是白色像素
+				if row < minRow {
+					minRow = row
+				}
+				if row > maxRow {
+					maxRow = row
+				}
+			}
+		}
+	}
+	if maxRow-minRow > 31 {
+		return "l"
+	} else {
+		return "I"
+	}
 }
 func randomCharacter() byte {
 	const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
