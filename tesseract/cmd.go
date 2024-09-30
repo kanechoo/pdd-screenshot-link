@@ -3,6 +3,7 @@ package tesseract
 import (
 	"fmt"
 	"gocv.io/x/gocv"
+	"log"
 	"os"
 	"os/exec"
 	"strings"
@@ -107,9 +108,16 @@ func getCommandLine(imageFile *string, commands string) *string {
 }
 func runThenGet(cmdStr *string) (string, error) {
 	var cmd *exec.Cmd
-	cmd = exec.Command("tesseract", strings.Split(*cmdStr, " ")...)
+	var cmdArray []string
+	for _, s := range strings.Split(*cmdStr, " ") {
+		if "" != s {
+			cmdArray = append(cmdArray, s)
+		}
+	}
+	cmd = exec.Command("tesseract", cmdArray...)
 	out, err := cmd.Output()
 	if err != nil {
+		log.Printf("运行命令【%s】失败：%v", strings.Join(cmdArray, " "), err)
 		return "", err
 	}
 	return string(out), nil

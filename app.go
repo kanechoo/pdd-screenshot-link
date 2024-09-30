@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"time"
 )
@@ -19,26 +20,35 @@ func init() {
 func main() {
 	engine := gin.Default()
 	engine.Use(cors.Default())
+	engine.Use(func(context *gin.Context) {
+		defer func() {
+			if err := recover(); err != nil {
+				context.JSON(http.StatusInternalServerError, gin.H{"data": err, "code": http.StatusInternalServerError})
+				context.Abort()
+			}
+		}()
+		context.Next()
+	})
 	engine.POST("/upload", func(c *gin.Context) {
 		system := c.Query("system")
 		file, _ := c.FormFile("file")
 		f, err := file.Open()
 		if err != nil {
-			c.JSON(500, gin.H{"data": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"data": err.Error(), "code": http.StatusInternalServerError})
 			return
 		}
 		b := make([]byte, file.Size)
 		_, err = f.Read(b)
 		if err != nil {
-			c.JSON(500, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "code": http.StatusInternalServerError})
 			return
 		}
 		result, err := handle(&b, system)
 		if err != nil {
-			c.JSON(500, gin.H{"data": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"data": err.Error(), "code": http.StatusInternalServerError})
 			return
 		}
-		c.JSON(200, gin.H{"data": result})
+		c.JSON(http.StatusOK, gin.H{"data": result, "code": http.StatusOK})
 	})
 	err := engine.Run(":8188")
 	if err != nil {
@@ -80,6 +90,10 @@ func handle(b *[]byte, system string) (*[]string, error) {
 	}
 	for i := 0; i < len(links); i++ {
 		links[i] = fmt.Sprintf("%c:/%s%s%s", randomCharacter(), "\u21e5", links[i], "\u21e4")
+	}
+	//反转数组
+	for i, j := 0, len(links)-1; i < j; i, j = i+1, j-1 {
+		links[i], links[j] = links[j], links[i]
 	}
 	return &links, nil
 }
